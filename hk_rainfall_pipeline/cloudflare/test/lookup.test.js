@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  apiKeyOk,
   canonicalDistrict,
+  enquiryHttpStatus,
+  extractApiKey,
+  isKnownDistrict,
   isValidDate,
   parseDates,
   shapeDay,
@@ -61,30 +65,68 @@ describe("parseDates", () => {
   });
 });
 
+describe("apiKey", () => {
+  it("rejects missing or wrong keys", () => {
+    assert.equal(apiKeyOk("", "secret"), false);
+    assert.equal(apiKeyOk("nope", "secret"), false);
+    assert.equal(apiKeyOk("secret", ""), false);
+  });
+  it("accepts the matching key", () => {
+    assert.equal(apiKeyOk("secret", "secret"), true);
+  });
+  it("reads key from query, X-API-Key, or Bearer", () => {
+    const q = new Request("https://x/rainy?key=from-query");
+    assert.equal(extractApiKey(q), "from-query");
+    const h = new Request("https://x/rainy", { headers: { "X-API-Key": "from-header" } });
+    assert.equal(extractApiKey(h), "from-header");
+    const b = new Request("https://x/rainy", { headers: { Authorization: "Bearer from-bearer" } });
+    assert.equal(extractApiKey(b), "from-bearer");
+  });
+});
+
+describe("isKnownDistrict", () => {
+  it("accepts canonical names and aliases", () => {
+    assert.equal(isKnownDistrict("Wan Chai"), true);
+    assert.equal(isKnownDistrict("灣仔區"), true);
+    assert.equal(isKnownDistrict("Lantau Island"), true);
+    assert.equal(isKnownDistrict("NotADistrict"), false);
+  });
+});
+
 describe("shapeDay", () => {
+  const range = { min_date: "2024-01-01", max_date: "2026-08-31" };
   it("returns mm and rainy when HKO published a value", () => {
     assert.deepEqual(
       shapeDay(
         { date: "2024-04-20", rainfall_mm: 21, data_ok: 1, is_rainy: 1 },
         "2024-04-20",
+        range,
       ),
-      { date: "2024-04-20", rainfall_mm: 21, is_rainy: true },
+      { date: "2024-04-20", rainfall_mm: 21, is_rainy: true, error: null },
     );
   });
-  it("returns nulls when the day is missing", () => {
-    assert.deepEqual(shapeDay(null, "1999-01-01"), {
+  it("marks dates outside coverage as out_of_range", () => {
+    assert.deepEqual(shapeDay(null, "1999-01-01", range), {
       date: "1999-01-01",
       rainfall_mm: null,
       is_rainy: null,
+      error: "out_of_range",
+    });
+    assert.deepEqual(shapeDay(null, "2030-01-01", range), {
+      date: "2030-01-01",
+      rainfall_mm: null,
+      is_rainy: null,
+      error: "out_of_range",
     });
   });
-  it("returns nulls when HKO has not published (not dry)", () => {
+  it("marks unpublished HKO days as no_data, not dry", () => {
     assert.deepEqual(
       shapeDay(
         { date: "2026-08-31", rainfall_mm: null, data_ok: 0, is_rainy: null },
         "2026-08-31",
+        range,
       ),
-      { date: "2026-08-31", rainfall_mm: null, is_rainy: null },
+      { date: "2026-08-31", rainfall_mm: null, is_rainy: null, error: "no_data" },
     );
   });
   it("returns 0 mm and not rainy for a dry published day", () => {
@@ -92,8 +134,9 @@ describe("shapeDay", () => {
       shapeDay(
         { date: "2024-01-02", rainfall_mm: 0, data_ok: 1, is_rainy: 0 },
         "2024-01-02",
+        range,
       ),
-      { date: "2024-01-02", rainfall_mm: 0, is_rainy: false },
+      { date: "2024-01-02", rainfall_mm: 0, is_rainy: false, error: null },
     );
   });
 });
@@ -117,14 +160,25 @@ describe("shapeEnquiry", () => {
         data_ok: 1,
         is_rainy: 1,
       },
-    ]);
+    ], { min_date: "2024-01-01", max_date: "2026-08-31" });
     assert.deepEqual(out, {
       district: "Wan Chai",
       district_zh: "灣仔區",
+      coverage: { min_date: "2024-01-01", max_date: "2026-08-31" },
       days: [
-        { date: "2024-04-20", rainfall_mm: 21, is_rainy: true },
-        { date: "2024-04-19", rainfall_mm: 0.5, is_rainy: true },
+        { date: "2024-04-20", rainfall_mm: 21, is_rainy: true, error: null },
+        { date: "2024-04-19", rainfall_mm: 0.5, is_rainy: true, error: null },
       ],
     });
+  });
+  it("uses HTTP 400 when every date is out of range", () => {
+    const out = shapeEnquiry(
+      "Wan Chai",
+      ["1999-01-01", "1999-01-02"],
+      [],
+      { min_date: "2024-01-01", max_date: "2026-08-31" },
+    );
+    assert.equal(enquiryHttpStatus(out.days), 400);
+    assert.equal(out.days[0].error, "out_of_range");
   });
 });

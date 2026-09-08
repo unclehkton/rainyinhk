@@ -3,8 +3,9 @@
 Ask one district for one or more dates. Each day is rainfall in mm and whether it was rainy (≥ 0.2 mm).
 
 ```text
-GET /rainy?district=Wan%20Chai&dates=2024-04-20,2024-04-19
+GET /rainy?key=YOUR_KEY&district=Wan%20Chai&dates=2024-04-20,2024-04-19
 GET /rainy?district=灣仔區&date=2024-04-20
+Header: X-API-Key: YOUR_KEY
 ```
 
 ```json
@@ -18,7 +19,7 @@ GET /rainy?district=灣仔區&date=2024-04-20
 }
 ```
 
-If HKO has not published that day, `rainfall_mm` and `is_rainy` are `null` (unknown, not dry). District names: the 18 District Councils plus `Lantau Island` (Airport `HKA`); `Islands` is CCH/PEN/WGL. No API key. Aliases are in `src/lookup.js`.
+If HKO has not published that day, `rainfall_mm` and `is_rainy` are `null` and `error` is `no_data`. Dates outside the table are `out_of_range`. Missing or wrong API key is HTTP 401. The key is the Worker secret `RAINY_API_KEY`, not a git file. District names: the 18 District Councils plus `Lantau Island` (Airport `HKA`); `Islands` is CCH/PEN/WGL.
 
 ## One-time setup
 

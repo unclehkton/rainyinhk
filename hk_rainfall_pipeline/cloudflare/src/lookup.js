@@ -77,6 +77,26 @@ export function canonicalDistrict(name) {
   return DISTRICT_ALIASES[key.toLowerCase()] ?? DISTRICT_ALIASES[key] ?? key;
 }
 
+export function isKnownDistrict(name) {
+  return Object.prototype.hasOwnProperty.call(DISTRICT_ZH, canonicalDistrict(name));
+}
+
+export function extractApiKey(request) {
+  const url = new URL(request.url);
+  const fromQuery = url.searchParams.get("key");
+  if (fromQuery && fromQuery.trim()) return fromQuery.trim();
+  const fromHeader = request.headers.get("X-API-Key") ?? request.headers.get("x-api-key");
+  if (fromHeader && fromHeader.trim()) return fromHeader.trim();
+  const auth = request.headers.get("Authorization") ?? "";
+  if (auth.toLowerCase().startsWith("bearer ")) return auth.slice(7).trim();
+  return "";
+}
+
+export function apiKeyOk(provided, expected) {
+  if (!expected || !provided) return false;
+  return provided === expected;
+}
+
 export function isValidDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value ?? "")) return false;
   const d = new Date(`${value}T00:00:00Z`);
@@ -109,24 +129,43 @@ export function toBool(value) {
   return Number(value) === 1;
 }
 
-export function shapeDay(row, date) {
-  if (!row || !toBool(row.data_ok)) {
-    return { date, rainfall_mm: null, is_rainy: null };
+export function shapeDay(row, date, coverage = {}) {
+  const minDate = coverage.min_date ?? null;
+  const maxDate = coverage.max_date ?? null;
+  if (minDate && maxDate && (date < minDate || date > maxDate)) {
+    return { date, rainfall_mm: null, is_rainy: null, error: "out_of_range" };
+  }
+  if (!row) {
+    return { date, rainfall_mm: null, is_rainy: null, error: "out_of_range" };
+  }
+  if (!toBool(row.data_ok)) {
+    return { date, rainfall_mm: null, is_rainy: null, error: "no_data" };
   }
   const mm = row.rainfall_mm;
   return {
     date,
     rainfall_mm: mm === null || mm === undefined || mm === "" ? null : Number(mm),
     is_rainy: toBool(row.is_rainy),
+    error: null,
   };
 }
 
-export function shapeEnquiry(districtRaw, dates, rows) {
+export function shapeEnquiry(districtRaw, dates, rows, coverage = {}) {
   const district = canonicalDistrict(districtRaw);
   const byDate = new Map((rows ?? []).map((row) => [row.date, row]));
   return {
     district,
     district_zh: DISTRICT_ZH[district] ?? rows?.[0]?.district_zh ?? null,
-    days: dates.map((date) => shapeDay(byDate.get(date) ?? null, date)),
+    coverage: {
+      min_date: coverage.min_date ?? null,
+      max_date: coverage.max_date ?? null,
+    },
+    days: dates.map((date) => shapeDay(byDate.get(date) ?? null, date, coverage)),
   };
+}
+
+export function enquiryHttpStatus(days) {
+  if (!days?.length) return 400;
+  if (days.every((day) => day.error === "out_of_range")) return 400;
+  return 200;
 }

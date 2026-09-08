@@ -45,11 +45,13 @@ This pipeline currently writes to:
 
 Copy those two files into the path above after each refresh.
 
-The live app query is the Worker, not a file on disk:
+The live app query is the Worker, not a file on disk. **An API key is required** so anonymous traffic cannot drain the free Workers/D1 quota. Pass it as `key=`, header `X-API-Key`, or `Authorization: Bearer`. The secret lives in Cloudflare (`RAINY_API_KEY`), not in this git tree.
 
-`GET https://hk-rainy-day.ngcheukhim.workers.dev/rainy?district=Wan%20Chai&dates=2024-04-20,2024-04-19`
+```text
+GET https://hk-rainy-day.ngcheukhim.workers.dev/rainy?key=YOUR_KEY&district=Wan%20Chai&dates=2024-04-20,2024-04-19
+```
 
-Each requested date returns `rainfall_mm` and `is_rainy`. Null means unknown (HKO has not published), not dry.
+Each requested date returns `rainfall_mm`, `is_rainy`, and `error`. `error` is `null` on success, `no_data` if HKO has not published that day, or `out_of_range` if the date is outside the table.
 
 D1 table `rainy_day_lookup` is the same table. Rebuild D1 with `cloudflare/build_seed.py` after `update_rainfall.py`.
 
@@ -81,9 +83,24 @@ Space in English names is `%20` in the URL (`Wan%20Chai`). Chinese names must be
 | `Islands` | 離島區 | | Cheung Chau `CCH`, Peng Chau `PEN`, Waglan Island `WGL` |
 | `Lantau Island` | 大嶼山 | `lantau`, 大嶼山區 | Airport `HKA` |
 
-English matching is case-insensitive (`wan chai` → `Wan Chai`). An unknown `district` still returns 200, with `rainfall_mm` and `is_rainy` null for every requested date.
+English matching is case-insensitive (`wan chai` → `Wan Chai`).
 
-`Lantau Island` is an API split of Islands District, not a 19th District Council. `Islands` / 離島區 is the rest of that district (Cheung Chau, Peng Chau, Waglan). The enquiry itself needs **no API key**.
+`Lantau Island` is an API split of Islands District, not a 19th District Council. `Islands` / 離島區 is the rest of that district (Cheung Chau, Peng Chau, Waglan).
+
+### Enquiry errors
+
+| Situation | HTTP | `error` |
+|---|---|---|
+| Missing or wrong API key | 401 | `unauthorized` |
+| Missing `district` or dates | 400 | `missing_params` |
+| Date not `YYYY-MM-DD` | 400 | `invalid_date` |
+| Name not in the mapping table | 400 | `unknown_district` |
+| More than 62 dates | 400 | `too_many_dates` |
+| Every requested date outside the table | 400 | `out_of_range` (body includes `min_date`, `max_date`) |
+| Date in range but HKO has not published | 200 | that day has `error: "no_data"`, `rainfall_mm`/`is_rainy` null |
+| Mixed good days and out-of-range days | 200 | out-of-range days have `error: "out_of_range"` |
+
+Wrong keys are rejected **before** D1 is queried.
 
 ## Rainy-day definition (do not change in the app)
 
@@ -118,12 +135,19 @@ Empty / NULL means “unknown”, not “not rainy”.
 The Worker returns one object per requested date:
 
 ```
-GET /rainy?district=D&dates=T1,T2,...
+GET /rainy?key=YOUR_KEY&district=D&dates=T1,T2,...
+
+if key wrong → 401 unauthorized
+if district unknown → 400 unknown_district
+if date format bad → 400 invalid_date
+if every date < min_date or > max_date → 400 out_of_range
 
 for each day:
-  if missing or not data_ok → rainfall_mm = null, is_rainy = null   # unknown
+  if date outside table → error = out_of_range, rainfall_mm/is_rainy = null
+  if HKO has not published → error = no_data, rainfall_mm/is_rainy = null
   else rainfall_mm is the district millimetres
        is_rainy is true iff rainfall_mm ≥ 0.2
+       error = null
 ```
 
 To ask “was T and T−1 rainy?”, pass both dates in one enquiry and read each day’s `is_rainy`.

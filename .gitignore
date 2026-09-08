@@ -11,3 +11,4 @@ hk_rainfall_pipeline/data/rainfall.db
 hk_rainfall_pipeline/cloudflare/node_modules/
 hk_rainfall_pipeline/cloudflare/.wrangler/
 hk_rainfall_pipeline/cloudflare/seed.sql
+hk_rainfall_pipeline/cloudflare/.dev.vars
