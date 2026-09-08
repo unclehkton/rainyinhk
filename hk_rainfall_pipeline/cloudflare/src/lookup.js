@@ -1,4 +1,6 @@
-/** District aliases and the programme contract for GET /rainy. */
+/** District aliases and the simplified rainy-day enquiry. */
+
+export const MAX_DATES = 62;
 
 export const DISTRICT_ALIASES = {
   "central and western": "Central and Western",
@@ -44,6 +46,27 @@ export const DISTRICT_ALIASES = {
   離島區: "Islands",
 };
 
+export const DISTRICT_ZH = {
+  "Central and Western": "中西區",
+  "Wan Chai": "灣仔區",
+  Eastern: "東區",
+  Southern: "南區",
+  "Yau Tsim Mong": "油尖旺區",
+  "Sham Shui Po": "深水埗區",
+  "Kowloon City": "九龍城區",
+  "Wong Tai Sin": "黃大仙區",
+  "Kwun Tong": "觀塘區",
+  "Tsuen Wan": "荃灣區",
+  "Tuen Mun": "屯門區",
+  "Yuen Long": "元朗區",
+  North: "北區",
+  "Tai Po": "大埔區",
+  "Sai Kung": "西貢區",
+  "Sha Tin": "沙田區",
+  "Kwai Tsing": "葵青區",
+  Islands: "離島區",
+};
+
 export function canonicalDistrict(name) {
   const key = String(name ?? "").trim();
   return DISTRICT_ALIASES[key.toLowerCase()] ?? DISTRICT_ALIASES[key] ?? key;
@@ -55,52 +78,50 @@ export function isValidDate(value) {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
 }
 
+export function parseDates(searchParams) {
+  const raw = [];
+  for (const value of searchParams.getAll("dates")) {
+    raw.push(...String(value).split(/[,\s]+/));
+  }
+  for (const value of searchParams.getAll("date")) raw.push(value);
+  const dates = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const date = String(item).trim();
+    if (!date) continue;
+    if (!isValidDate(date)) return { error: "invalid_date", date };
+    if (seen.has(date)) continue;
+    seen.add(date);
+    dates.push(date);
+  }
+  if (!dates.length) return { error: "missing_dates" };
+  if (dates.length > MAX_DATES) return { error: "too_many_dates", max: MAX_DATES };
+  return { dates };
+}
+
 export function toBool(value) {
   if (value === null || value === undefined || value === "") return null;
   return Number(value) === 1;
 }
 
-export function verdict(row) {
-  if (!row) return "UNKNOWN";
-  const dataOk = toBool(row.data_ok);
-  const prevOk = toBool(row.prev_data_ok);
-  if (!dataOk || !prevOk) return "UNKNOWN";
-  if (toBool(row.two_day_rainy)) return "RAINY_TWO_DAYS";
-  if (toBool(row.is_rainy)) return "RAINY_TODAY_ONLY";
-  return "NOT_RAINY";
+export function shapeDay(row, date) {
+  if (!row || !toBool(row.data_ok)) {
+    return { date, rainfall_mm: null, is_rainy: null };
+  }
+  const mm = row.rainfall_mm;
+  return {
+    date,
+    rainfall_mm: mm === null || mm === undefined || mm === "" ? null : Number(mm),
+    is_rainy: toBool(row.is_rainy),
+  };
 }
 
-export function shapeResponse(row, requestedDate, requestedDistrict) {
-  const district = canonicalDistrict(requestedDistrict);
-  if (!row) {
-    return {
-      found: false,
-      date: requestedDate,
-      district_en: district,
-      is_rainy: null,
-      prev_is_rainy: null,
-      two_day_rainy: null,
-      data_ok: null,
-      prev_data_ok: null,
-      verdict: "UNKNOWN",
-      reason: "no_row",
-    };
-  }
+export function shapeEnquiry(districtRaw, dates, rows) {
+  const district = canonicalDistrict(districtRaw);
+  const byDate = new Map((rows ?? []).map((row) => [row.date, row]));
   return {
-    found: true,
-    date: row.date,
-    district_en: row.district_en,
-    district_zh: row.district_zh,
-    rainfall_mm: row.rainfall_mm,
-    data_ok: toBool(row.data_ok),
-    is_rainy: toBool(row.is_rainy),
-    prev_date: row.prev_date,
-    prev_rainfall_mm: row.prev_rainfall_mm,
-    prev_data_ok: toBool(row.prev_data_ok),
-    prev_is_rainy: toBool(row.prev_is_rainy),
-    two_day_rainy: toBool(row.two_day_rainy),
-    assignment: row.assignment,
-    source_station_codes: row.source_station_codes,
-    verdict: verdict(row),
+    district,
+    district_zh: DISTRICT_ZH[district] ?? rows?.[0]?.district_zh ?? null,
+    days: dates.map((date) => shapeDay(byDate.get(date) ?? null, date)),
   };
 }

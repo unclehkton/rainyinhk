@@ -3,8 +3,9 @@ import { describe, it } from "node:test";
 import {
   canonicalDistrict,
   isValidDate,
-  shapeResponse,
-  verdict,
+  parseDates,
+  shapeDay,
+  shapeEnquiry,
 } from "../src/lookup.js";
 
 describe("canonicalDistrict", () => {
@@ -30,53 +31,71 @@ describe("isValidDate", () => {
   });
 });
 
-describe("verdict", () => {
-  it("UNKNOWN when the row is missing", () => {
-    assert.equal(verdict(null), "UNKNOWN");
+describe("parseDates", () => {
+  it("accepts a single date=", () => {
+    const q = new URLSearchParams("date=2024-04-20");
+    assert.deepEqual(parseDates(q), { dates: ["2024-04-20"] });
   });
-  it("UNKNOWN when today has no HKO value", () => {
-    assert.equal(
-      verdict({ data_ok: 0, prev_data_ok: 1, is_rainy: null, two_day_rainy: null }),
-      "UNKNOWN",
+  it("accepts repeated date= and comma-separated dates=", () => {
+    const q = new URLSearchParams("dates=2024-04-19,2024-04-20&date=2024-04-21");
+    assert.deepEqual(parseDates(q), {
+      dates: ["2024-04-19", "2024-04-20", "2024-04-21"],
+    });
+  });
+  it("dedupes while keeping first-seen order", () => {
+    const q = new URLSearchParams("dates=2024-04-20,2024-04-19,2024-04-20");
+    assert.deepEqual(parseDates(q), { dates: ["2024-04-20", "2024-04-19"] });
+  });
+  it("rejects an invalid date", () => {
+    const q = new URLSearchParams("dates=2024-04-20,nope");
+    assert.equal(parseDates(q).error, "invalid_date");
+    assert.equal(parseDates(q).date, "nope");
+  });
+  it("rejects a missing list", () => {
+    assert.equal(parseDates(new URLSearchParams("district=Wan+Chai")).error, "missing_dates");
+  });
+});
+
+describe("shapeDay", () => {
+  it("returns mm and rainy when HKO published a value", () => {
+    assert.deepEqual(
+      shapeDay(
+        { date: "2024-04-20", rainfall_mm: 21, data_ok: 1, is_rainy: 1 },
+        "2024-04-20",
+      ),
+      { date: "2024-04-20", rainfall_mm: 21, is_rainy: true },
     );
   });
-  it("UNKNOWN when yesterday has no HKO value", () => {
-    assert.equal(
-      verdict({ data_ok: 1, prev_data_ok: null, is_rainy: 1, two_day_rainy: null }),
-      "UNKNOWN",
+  it("returns nulls when the day is missing", () => {
+    assert.deepEqual(shapeDay(null, "1999-01-01"), {
+      date: "1999-01-01",
+      rainfall_mm: null,
+      is_rainy: null,
+    });
+  });
+  it("returns nulls when HKO has not published (not dry)", () => {
+    assert.deepEqual(
+      shapeDay(
+        { date: "2026-08-31", rainfall_mm: null, data_ok: 0, is_rainy: null },
+        "2026-08-31",
+      ),
+      { date: "2026-08-31", rainfall_mm: null, is_rainy: null },
     );
   });
-  it("RAINY_TWO_DAYS only when both days are wet and both have data", () => {
-    assert.equal(
-      verdict({ data_ok: 1, prev_data_ok: 1, is_rainy: 1, two_day_rainy: 1 }),
-      "RAINY_TWO_DAYS",
-    );
-  });
-  it("RAINY_TODAY_ONLY when only today is wet", () => {
-    assert.equal(
-      verdict({ data_ok: 1, prev_data_ok: 1, is_rainy: 1, two_day_rainy: 0 }),
-      "RAINY_TODAY_ONLY",
-    );
-  });
-  it("NOT_RAINY when today is dry and both days have data", () => {
-    assert.equal(
-      verdict({ data_ok: 1, prev_data_ok: 1, is_rainy: 0, two_day_rainy: 0 }),
-      "NOT_RAINY",
+  it("returns 0 mm and not rainy for a dry published day", () => {
+    assert.deepEqual(
+      shapeDay(
+        { date: "2024-01-02", rainfall_mm: 0, data_ok: 1, is_rainy: 0 },
+        "2024-01-02",
+      ),
+      { date: "2024-01-02", rainfall_mm: 0, is_rainy: false },
     );
   });
 });
 
-describe("shapeResponse", () => {
-  it("marks a missing row unknown", () => {
-    const out = shapeResponse(null, "2024-04-20", "灣仔區");
-    assert.equal(out.found, false);
-    assert.equal(out.district_en, "Wan Chai");
-    assert.equal(out.verdict, "UNKNOWN");
-    assert.equal(out.two_day_rainy, null);
-  });
-
-  it("exposes two_day_rainy for the known Wan Chai wet pair", () => {
-    const out = shapeResponse(
+describe("shapeEnquiry", () => {
+  it("returns one district and one row per requested date", () => {
+    const out = shapeEnquiry("灣仔區", ["2024-04-20", "2024-04-19"], [
       {
         date: "2024-04-20",
         district_en: "Wan Chai",
@@ -84,21 +103,23 @@ describe("shapeResponse", () => {
         rainfall_mm: 21,
         data_ok: 1,
         is_rainy: 1,
-        prev_date: "2024-04-19",
-        prev_rainfall_mm: 0.5,
-        prev_data_ok: 1,
-        prev_is_rainy: 1,
-        two_day_rainy: 1,
-        assignment: "reference_station",
-        source_station_codes: "VP1",
       },
-      "2024-04-20",
-      "Wan Chai",
-    );
-    assert.equal(out.found, true);
-    assert.equal(out.two_day_rainy, true);
-    assert.equal(out.verdict, "RAINY_TWO_DAYS");
-    assert.equal(out.assignment, "reference_station");
-    assert.equal(out.source_station_codes, "VP1");
+      {
+        date: "2024-04-19",
+        district_en: "Wan Chai",
+        district_zh: "灣仔區",
+        rainfall_mm: 0.5,
+        data_ok: 1,
+        is_rainy: 1,
+      },
+    ]);
+    assert.deepEqual(out, {
+      district: "Wan Chai",
+      district_zh: "灣仔區",
+      days: [
+        { date: "2024-04-20", rainfall_mm: 21, is_rainy: true },
+        { date: "2024-04-19", rainfall_mm: 0.5, is_rainy: true },
+      ],
+    });
   });
 });

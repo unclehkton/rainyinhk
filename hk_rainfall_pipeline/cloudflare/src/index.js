@@ -1,4 +1,4 @@
-import { canonicalDistrict, isValidDate, shapeResponse } from "./lookup.js";
+import { canonicalDistrict, parseDates, shapeEnquiry } from "./lookup.js";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -30,27 +30,31 @@ export default {
       return json({ error: "not_found" }, 404);
     }
 
-    const date = url.searchParams.get("date") ?? "";
     const districtRaw = url.searchParams.get("district") ?? "";
-    if (!date || !districtRaw) {
-      return json({ error: "missing_params", need: ["date", "district"] }, 400);
+    if (!districtRaw) {
+      return json({ error: "missing_params", need: ["district", "date or dates"] }, 400);
     }
-    if (!isValidDate(date)) {
-      return json({ error: "invalid_date", date }, 400);
+    const parsed = parseDates(url.searchParams);
+    if (parsed.error === "missing_dates") {
+      return json({ error: "missing_params", need: ["district", "date or dates"] }, 400);
+    }
+    if (parsed.error === "invalid_date") {
+      return json({ error: "invalid_date", date: parsed.date }, 400);
+    }
+    if (parsed.error) {
+      return json({ error: parsed.error, max: parsed.max }, 400);
     }
 
     const district = canonicalDistrict(districtRaw);
-    const row = await env.DB.prepare(
-      `SELECT date, district_en, district_zh, assignment, source_station_codes,
-              rainfall_mm, data_ok, is_rainy, prev_date, prev_rainfall_mm,
-              prev_data_ok, prev_is_rainy, two_day_rainy
+    const placeholders = parsed.dates.map(() => "?").join(",");
+    const result = await env.DB.prepare(
+      `SELECT date, district_en, district_zh, rainfall_mm, data_ok, is_rainy
          FROM rainy_day_lookup
-        WHERE district_en = ? AND date = ?
-        LIMIT 1`,
+        WHERE district_en = ? AND date IN (${placeholders})`,
     )
-      .bind(district, date)
-      .first();
+      .bind(district, ...parsed.dates)
+      .all();
 
-    return json(shapeResponse(row, date, district));
+    return json(shapeEnquiry(district, parsed.dates, result.results ?? []));
   },
 };

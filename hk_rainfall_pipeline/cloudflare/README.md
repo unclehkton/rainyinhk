@@ -1,19 +1,24 @@
 # hk-rainy-day Worker
 
-Answers one question: for district D on date T, was T rainy, and was T−1 rainy?
+Ask one district for one or more dates. Each day is rainfall in mm and whether it was rainy (≥ 0.2 mm).
 
 ```text
-GET /rainy?date=YYYY-MM-DD&district=Wan%20Chai
+GET /rainy?district=Wan%20Chai&dates=2024-04-20,2024-04-19
+GET /rainy?district=灣仔區&date=2024-04-20
 ```
 
-Use `two_day_rainy`. If `data_ok` is false, `prev_data_ok` is false, or flags are null → unknown. `verdict` is the programme contract:
+```json
+{
+  "district": "Wan Chai",
+  "district_zh": "灣仔區",
+  "days": [
+    { "date": "2024-04-20", "rainfall_mm": 21, "is_rainy": true },
+    { "date": "2024-04-19", "rainfall_mm": 0.5, "is_rainy": true }
+  ]
+}
+```
 
-- `UNKNOWN`
-- `RAINY_TWO_DAYS`
-- `RAINY_TODAY_ONLY`
-- `NOT_RAINY`
-
-District names: English 18-district list, or the Chinese aliases in `src/lookup.js`.
+If HKO has not published that day, `rainfall_mm` and `is_rainy` are `null` (unknown, not dry). District names: English 18-district list, or the Chinese aliases in `src/lookup.js`.
 
 ## One-time setup
 

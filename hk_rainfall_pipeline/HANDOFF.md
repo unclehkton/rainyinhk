@@ -47,7 +47,9 @@ Copy those two files into the path above after each refresh.
 
 The live app query is the Worker, not a file on disk:
 
-`GET https://hk-rainy-day.ngcheukhim.workers.dev/rainy?date=YYYY-MM-DD&district=Wan%20Chai`
+`GET https://hk-rainy-day.ngcheukhim.workers.dev/rainy?district=Wan%20Chai&dates=2024-04-20,2024-04-19`
+
+Each requested date returns `rainfall_mm` and `is_rainy`. Null means unknown (HKO has not published), not dry.
 
 D1 table `rainy_day_lookup` is the same table. Rebuild D1 with `cloudflare/build_seed.py` after `update_rainfall.py`.
 
@@ -79,25 +81,18 @@ Empty / NULL means “unknown”, not “not rainy”.
 
 ## How the programme should decide
 
-Pseudo-code:
+The Worker returns one object per requested date:
 
 ```
-row = lookup.get(date=D, district=user_district)
+GET /rainy?district=D&dates=T1,T2,...
 
-if row is missing:
-    return UNKNOWN          # date outside table, or name not recognised
-
-if row.data_ok == 0 or row.prev_data_ok == 0:
-    return UNKNOWN          # do not guess; HKO has not published that day yet
-
-if row.two_day_rainy == 1:
-    return RAINY_TWO_DAYS   # D and D-1 both ≥ 0.2 mm
-
-if row.is_rainy == 1:
-    return RAINY_TODAY_ONLY
-
-return NOT_RAINY
+for each day:
+  if missing or not data_ok → rainfall_mm = null, is_rainy = null   # unknown
+  else rainfall_mm is the district millimetres
+       is_rainy is true iff rainfall_mm ≥ 0.2
 ```
+
+To ask “was T and T−1 rainy?”, pass both dates in one enquiry and read each day’s `is_rainy`.
 
 Python (this folder):
 

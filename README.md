@@ -2,12 +2,10 @@
 
 Hong Kong district rainy-day lookup.
 
-For district D on date T: was T rainy, and was T−1 rainy?
+Ask one district for one or more dates. Each day comes back as millimetres and whether it was rainy (≥ 0.2 mm). Missing HKO values are `null`, not dry.
 
 ```text
-GET https://hk-rainy-day.ngcheukhim.workers.dev/rainy?date=YYYY-MM-DD&district=Wan%20Chai
+GET https://hk-rainy-day.ngcheukhim.workers.dev/rainy?district=Wan%20Chai&dates=2024-04-20,2024-04-19
 ```
 
-Use `two_day_rainy`. If `data_ok` is false or flags are null → unknown.
-
-Details: `hk_rainfall_pipeline/HANDOFF.md`.
+`date=` still works for a single day. Details: `hk_rainfall_pipeline/HANDOFF.md`.
