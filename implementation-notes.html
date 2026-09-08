@@ -25,7 +25,7 @@
 
   <h2>2. Decisions</h2>
   <ul>
-    <li>One table: <code>rainy_day_lookup</code> (~17.5k rows). Query is one indexed SELECT.</li>
+    <li>Lookup table <code>rainy_day_lookup</code> (~18.5k rows) plus one-row <code>pipeline_meta</code>. Request time reads the meta row, then an indexed SELECT of the asked dates — not a full-table MIN/MAX/COUNT.</li>
     <li>Scrape on Mac or GitHub Actions. Not inside a free Worker (10 ms CPU, 50 subrequests).</li>
     <li>No VPS. Monthly job is a few Linux minutes.</li>
     <li>This feed is monthly QC climate data. It will not give “yesterday morning.”</li>
@@ -45,6 +45,7 @@
     <li>2026-09-08: Split Islands: Lantau Island → <code>HKA</code>; other Islands District → <code>CCH</code>, <code>PEN</code>, <code>WGL</code>.</li>
     <li>2026-09-08: Required Worker API key (<code>RAINY_API_KEY</code> secret). Explicit errors: 401 unauthorized, 400 unknown_district / invalid_date / out_of_range, per-day <code>no_data</code>.</li>
     <li>2026-09-08: Hardened deploy: automated Worker deploy, header-only auth, CI tests, weekly fingerprint rebuild, pinned Wrangler/Python deps, D1-aware <code>/health</code>, <code>data_gap</code> vs <code>out_of_range</code>.</li>
+    <li>2026-09-08: Request-time D1 reads use <code>pipeline_meta</code> (one row) instead of aggregating the lookup table on every <code>/rainy</code> and <code>/health</code>.</li>
   </ul>
 </body>
 </html>

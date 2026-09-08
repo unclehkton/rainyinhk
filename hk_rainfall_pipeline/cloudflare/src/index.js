@@ -38,12 +38,9 @@ export default {
     if (url.pathname === "/health") {
       try {
         const stats = await env.DB.prepare(
-          `SELECT COUNT(*) AS rows,
-                  COUNT(DISTINCT district_en) AS districts,
-                  MIN(date) AS min_date,
-                  MAX(date) AS max_date,
-                  MAX(refreshed_at_utc) AS refreshed_at_utc
-             FROM rainy_day_lookup`,
+          `SELECT rows, districts, min_date, max_date, refreshed_at_utc
+             FROM pipeline_meta
+            WHERE id = 1`,
         ).first();
         const body = shapeHealth(stats);
         return json(body, body.ok ? 200 : 503);
@@ -79,7 +76,7 @@ export default {
 
     const district = canonicalDistrict(districtRaw);
     const bounds = await env.DB.prepare(
-      "SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM rainy_day_lookup",
+      `SELECT min_date, max_date FROM pipeline_meta WHERE id = 1`,
     ).first();
     const coverage = {
       min_date: bounds?.min_date ?? null,

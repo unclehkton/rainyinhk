@@ -3,10 +3,13 @@ import { describe, it } from "node:test";
 import worker from "../src/index.js";
 
 function mockEnv({ first = null, all = [], apiKey = "secret", fail = false } = {}) {
+  const sqls = [];
   return {
     RAINY_API_KEY: apiKey,
+    sqls,
     DB: {
-      prepare() {
+      prepare(sql) {
+        sqls.push(sql);
         if (fail) {
           return {
             bind() {
@@ -48,22 +51,22 @@ describe("worker", () => {
   });
 
   it("health-checks D1 and fails when the table is empty", async () => {
-    const res = await get(
-      "/health",
-      mockEnv({
-        first: {
-          rows: 0,
-          districts: 0,
-          min_date: null,
-          max_date: null,
-          refreshed_at_utc: null,
-        },
-      }),
-    );
+    const env = mockEnv({
+      first: {
+        rows: 0,
+        districts: 0,
+        min_date: null,
+        max_date: null,
+        refreshed_at_utc: null,
+      },
+    });
+    const res = await get("/health", env);
     assert.equal(res.status, 503);
     const body = await res.json();
     assert.equal(body.ok, false);
     assert.ok(body.reasons.includes("empty"));
+    assert.match(env.sqls[0], /pipeline_meta/);
+    assert.doesNotMatch(env.sqls[0], /rainy_day_lookup/);
   });
 
   it("rejects query-string API keys", async () => {
@@ -93,6 +96,9 @@ describe("worker", () => {
     const body = await res.json();
     assert.equal(body.days[0].rainfall_mm, 21);
     assert.equal(body.days[0].error, null);
+    assert.match(env.sqls[0], /pipeline_meta/);
+    assert.match(env.sqls[1], /rainy_day_lookup/);
+    assert.doesNotMatch(env.sqls[0], /MIN\(date\)/);
   });
 
   it("returns 500 data_gap for a missing in-range row", async () => {

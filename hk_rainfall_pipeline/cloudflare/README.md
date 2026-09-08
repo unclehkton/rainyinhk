@@ -25,7 +25,7 @@ If HKO has not published that day, `rainfall_mm` and `is_rainy` are `null` and `
 
 District names: **18 District Councils + Lantau Island split**. `Lantau Island` is Airport `HKA`; `Islands` is CCH/PEN/WGL.
 
-`GET /health` queries D1 and returns row count, date bounds, and `refreshed_at_utc`. It is 503 if the table is empty, incomplete, or stale. `GET /` is a cheap liveness probe and does not touch D1.
+`GET /health` reads the one-row `pipeline_meta` table (row count, date bounds, `refreshed_at_utc`) and is 503 if that snapshot is empty, incomplete, or stale. `GET /rainy` uses the same row for coverage, then an indexed lookup of the requested dates. `GET /` is a cheap liveness probe and does not touch D1.
 
 CORS is `Access-Control-Allow-Origin: *`. A shared API key cannot be kept secret in public frontend JavaScript; use this key from a backend, or put rate limiting / Access in front of anonymous browser traffic.
 

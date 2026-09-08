@@ -22,3 +22,12 @@ CREATE TABLE IF NOT EXISTS rainy_day_lookup (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rainy_lookup ON rainy_day_lookup(district_en, date);
+
+CREATE TABLE IF NOT EXISTS pipeline_meta (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  rows INTEGER NOT NULL,
+  districts INTEGER NOT NULL,
+  min_date TEXT,
+  max_date TEXT,
+  refreshed_at_utc TEXT
+);
