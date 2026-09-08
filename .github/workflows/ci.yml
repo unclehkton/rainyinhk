@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: hk_rainfall_pipeline/cloudflare/package-lock.json
+      - name: Install Python deps
+        run: pip install -r hk_rainfall_pipeline/requirements.txt
+      - name: Python tests
+        working-directory: hk_rainfall_pipeline
+        run: python -m unittest discover tests
+      - name: Install Worker deps
+        working-directory: hk_rainfall_pipeline/cloudflare
+        run: npm ci
+      - name: Worker tests
+        working-directory: hk_rainfall_pipeline/cloudflare
+        run: npm test

@@ -1,0 +1,32 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - hk_rainfall_pipeline/cloudflare/src/**
+      - hk_rainfall_pipeline/cloudflare/wrangler.toml
+      - hk_rainfall_pipeline/cloudflare/package.json
+      - hk_rainfall_pipeline/cloudflare/package-lock.json
+      - .github/workflows/deploy-worker.yml
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hk_rainfall_pipeline/cloudflare
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: hk_rainfall_pipeline/cloudflare/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - name: wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy

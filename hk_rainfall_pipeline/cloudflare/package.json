@@ -5,6 +5,9 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "seed": "../.venv/bin/python build_seed.py",
-    "deploy": "npx wrangler deploy"
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "4.129.1"
   }
 }

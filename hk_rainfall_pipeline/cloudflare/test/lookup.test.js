@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  EXPECTED_DISTRICTS,
   apiKeyOk,
   canonicalDistrict,
   enquiryHttpStatus,
@@ -10,6 +11,7 @@ import {
   parseDates,
   shapeDay,
   shapeEnquiry,
+  shapeHealth,
 } from "../src/lookup.js";
 
 describe("canonicalDistrict", () => {
@@ -74,10 +76,12 @@ describe("apiKey", () => {
   it("accepts the matching key", () => {
     assert.equal(apiKeyOk("secret", "secret"), true);
   });
-  it("reads key from query, X-API-Key, or Bearer", () => {
+  it("reads key from X-API-Key or Bearer, not the query string", () => {
     const q = new Request("https://x/rainy?key=from-query");
-    assert.equal(extractApiKey(q), "from-query");
-    const h = new Request("https://x/rainy", { headers: { "X-API-Key": "from-header" } });
+    assert.equal(extractApiKey(q), "");
+    const h = new Request("https://x/rainy?key=from-query", {
+      headers: { "X-API-Key": "from-header" },
+    });
     assert.equal(extractApiKey(h), "from-header");
     const b = new Request("https://x/rainy", { headers: { Authorization: "Bearer from-bearer" } });
     assert.equal(extractApiKey(b), "from-bearer");
@@ -122,12 +126,20 @@ describe("shapeDay", () => {
   it("marks unpublished HKO days as no_data, not dry", () => {
     assert.deepEqual(
       shapeDay(
-        { date: "2026-08-31", rainfall_mm: null, data_ok: 0, is_rainy: null },
-        "2026-08-31",
+        { date: "2026-08-15", rainfall_mm: null, data_ok: 0, is_rainy: null },
+        "2026-08-15",
         range,
       ),
-      { date: "2026-08-31", rainfall_mm: null, is_rainy: null, error: "no_data" },
+      { date: "2026-08-15", rainfall_mm: null, is_rainy: null, error: "no_data" },
     );
+  });
+  it("marks a missing in-range row as data_gap, not out_of_range", () => {
+    assert.deepEqual(shapeDay(null, "2025-06-10", range), {
+      date: "2025-06-10",
+      rainfall_mm: null,
+      is_rainy: null,
+      error: "data_gap",
+    });
   });
   it("returns 0 mm and not rainy for a dry published day", () => {
     assert.deepEqual(
@@ -180,5 +192,62 @@ describe("shapeEnquiry", () => {
     );
     assert.equal(enquiryHttpStatus(out.days), 400);
     assert.equal(out.days[0].error, "out_of_range");
+  });
+  it("uses HTTP 500 when an in-range row is missing", () => {
+    const out = shapeEnquiry(
+      "Wan Chai",
+      ["2025-06-10"],
+      [],
+      { min_date: "2024-01-01", max_date: "2026-08-31" },
+    );
+    assert.equal(out.days[0].error, "data_gap");
+    assert.equal(enquiryHttpStatus(out.days), 500);
+  });
+});
+
+describe("shapeHealth", () => {
+  const now = new Date("2026-09-08T12:00:00Z");
+  const good = {
+    rows: 18506,
+    districts: EXPECTED_DISTRICTS,
+    min_date: "2024-01-01",
+    max_date: "2026-08-31",
+    refreshed_at_utc: "2026-09-08T08:48:53Z",
+  };
+
+  it("exposes 18 District Councils plus Lantau Island", () => {
+    assert.equal(EXPECTED_DISTRICTS, 19);
+  });
+
+  it("is healthy for a complete recent grid", () => {
+    assert.deepEqual(shapeHealth(good, now), {
+      ok: true,
+      rows: 18506,
+      districts: 19,
+      min_date: "2024-01-01",
+      max_date: "2026-08-31",
+      refreshed_at_utc: "2026-09-08T08:48:53Z",
+    });
+  });
+
+  it("fails when the table is empty", () => {
+    const out = shapeHealth(
+      { rows: 0, districts: 0, min_date: null, max_date: null, refreshed_at_utc: null },
+      now,
+    );
+    assert.equal(out.ok, false);
+    assert.ok(out.reasons.includes("empty"));
+  });
+
+  it("fails when an in-range day is missing from the grid", () => {
+    const out = shapeHealth({ ...good, rows: 18505 }, now);
+    assert.equal(out.ok, false);
+    assert.ok(out.reasons.includes("incomplete_grid"));
+  });
+
+  it("fails when max_date is more than 120 days old", () => {
+    const out = shapeHealth({ ...good, max_date: "2026-01-01" }, now);
+    assert.equal(out.ok, false);
+    assert.ok(out.reasons.includes("stale"));
   });
 });

@@ -4,13 +4,18 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
+
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import rainy_day  # noqa: E402
 from rainy_day import canonical_district, check_rainy  # noqa: E402
+from update_rainfall import build_lookup  # noqa: E402
 
 
 class CanonicalDistrictTests(unittest.TestCase):
@@ -86,12 +91,68 @@ class LookupContractTests(unittest.TestCase):
         self.assertEqual(row["reason"], "no_row")
 
     def test_missing_hko_values_are_not_dry(self):
-        row = check_rainy("2026-08-31", "Wan Chai")
+        csv = Path(tempfile.mkdtemp()) / "rainy_day_lookup.csv"
+        pd.DataFrame(
+            [
+                {
+                    "date": "2099-01-15",
+                    "district_en": "Wan Chai",
+                    "district_zh": "灣仔區",
+                    "assignment": "reference_station",
+                    "source_station_codes": "VP1",
+                    "n_stations": 1,
+                    "n_stations_with_data": 0,
+                    "n_nonzero_stations": 0,
+                    "pct_nonzero_stations": pd.NA,
+                    "rainfall_mm": pd.NA,
+                    "wet_limit_mm": 0.2,
+                    "data_ok": 0,
+                    "is_rainy": pd.NA,
+                    "prev_date": "2099-01-14",
+                    "prev_rainfall_mm": pd.NA,
+                    "prev_data_ok": 0,
+                    "prev_is_rainy": pd.NA,
+                    "two_day_rainy": pd.NA,
+                    "refreshed_at_utc": "2026-01-01T00:00:00Z",
+                }
+            ]
+        ).to_csv(csv, index=False)
+        old_db, old_csv = rainy_day.DB_PATH, rainy_day.CSV_PATH
+        rainy_day.DB_PATH = csv.with_name("missing.db")
+        rainy_day.CSV_PATH = csv
+        try:
+            row = rainy_day.check_rainy("2099-01-15", "Wan Chai")
+        finally:
+            rainy_day.DB_PATH = old_db
+            rainy_day.CSV_PATH = old_csv
         self.assertTrue(row["found"])
         self.assertFalse(row["data_ok"])
         self.assertIsNone(row["rainfall_mm"])
         self.assertIsNone(row["is_rainy"])
         self.assertIsNone(row["two_day_rainy"])
+
+
+class BuildLookupNoDataTests(unittest.TestCase):
+    def test_zero_stations_with_data_is_unknown_not_dry(self):
+        dist = pd.DataFrame(
+            [
+                {
+                    "date": pd.Timestamp("2099-01-15"),
+                    "district_en": "Wan Chai",
+                    "district_zh": "灣仔區",
+                    "assignment": "reference_station",
+                    "source_station_codes": "VP1",
+                    "n_stations": 1,
+                    "n_stations_with_data": 0,
+                    "n_nonzero_stations": 0,
+                    "rainfall_mm": pd.NA,
+                }
+            ]
+        )
+        out = build_lookup(dist).iloc[0]
+        self.assertFalse(bool(out["data_ok"]))
+        self.assertTrue(pd.isna(out["is_rainy"]))
+        self.assertTrue(pd.isna(out["two_day_rainy"]))
 
 
 if __name__ == "__main__":

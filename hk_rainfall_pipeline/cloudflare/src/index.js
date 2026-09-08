@@ -6,6 +6,7 @@ import {
   isKnownDistrict,
   parseDates,
   shapeEnquiry,
+  shapeHealth,
 } from "./lookup.js";
 
 const CORS = {
@@ -31,8 +32,24 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (url.pathname === "/" || url.pathname === "/health") {
+    if (url.pathname === "/") {
       return json({ ok: true, service: "hk-rainy-day" });
+    }
+    if (url.pathname === "/health") {
+      try {
+        const stats = await env.DB.prepare(
+          `SELECT COUNT(*) AS rows,
+                  COUNT(DISTINCT district_en) AS districts,
+                  MIN(date) AS min_date,
+                  MAX(date) AS max_date,
+                  MAX(refreshed_at_utc) AS refreshed_at_utc
+             FROM rainy_day_lookup`,
+        ).first();
+        const body = shapeHealth(stats);
+        return json(body, body.ok ? 200 : 503);
+      } catch {
+        return json({ ok: false, error: "unhealthy", reasons: ["d1_error"] }, 503);
+      }
     }
     if (url.pathname !== "/rainy") {
       return json({ error: "not_found" }, 404);
@@ -88,6 +105,15 @@ export default {
         max_date: coverage.max_date,
         days: body.days,
       }, 400);
+    }
+    if (status === 500) {
+      return json({
+        error: "data_gap",
+        message: "an in-range date is missing from the table",
+        min_date: coverage.min_date,
+        max_date: coverage.max_date,
+        days: body.days,
+      }, 500);
     }
     return json(body);
   },

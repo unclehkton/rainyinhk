@@ -12,7 +12,8 @@
     Hong Kong district rainy-day lookup is live as a Cloudflare Worker over D1.
     The Mac/Actions job scrapes HKO monthly; the Worker answers
     <code>GET /rainy?district=&amp;dates=</code>
-    at <a href="https://hk-rainy-day.ngcheukhim.workers.dev/rainy?district=Wan%20Chai&amp;dates=2024-04-20,2024-04-19">https://hk-rainy-day.ngcheukhim.workers.dev</a>.
+    with <code>Authorization: Bearer</code> or <code>X-API-Key</code>
+    at <a href="https://hk-rainy-day.ngcheukhim.workers.dev/health">https://hk-rainy-day.ngcheukhim.workers.dev</a>.
   </p>
   <ul>
     <li>Source: HKO / DATA.GOV.HK daily total rainfall (25 official stations).</li>
@@ -29,6 +30,11 @@
     <li>No VPS. Monthly job is a few Linux minutes.</li>
     <li>This feed is monthly QC climate data. It will not give “yesterday morning.”</li>
     <li>Public GitHub repo for unlimited Actions minutes. Keep <code>workflow_dispatch</code>. Secret: <code>CLOUDFLARE_API_TOKEN</code>.</li>
+    <li>API covers 18 District Councils + Lantau Island split (19 keys).</li>
+    <li>Worker deploys from <code>deploy-worker.yml</code> when Worker sources change. Rainfall D1 updates stay on <code>update-rainfall.yml</code>.</li>
+    <li>Header-only API key. Query-string <code>?key=</code> is rejected. CORS is <code>*</code>, so this key is for a backend caller, not a public web app.</li>
+    <li>Weekly job stores HKO Last-Modified/ETag fingerprints and rebuilds only when they change. Monthly job on the 10th always rebuilds.</li>
+    <li>Python and Worker tests run on every push/PR and before a D1 import.</li>
   </ul>
 
   <h2>3. Change log</h2>
@@ -38,6 +44,7 @@
     <li>2026-09-08: Added the 18-district API mapping table to <code>hk_rainfall_pipeline/HANDOFF.md</code>.</li>
     <li>2026-09-08: Split Islands: Lantau Island → <code>HKA</code>; other Islands District → <code>CCH</code>, <code>PEN</code>, <code>WGL</code>.</li>
     <li>2026-09-08: Required Worker API key (<code>RAINY_API_KEY</code> secret). Explicit errors: 401 unauthorized, 400 unknown_district / invalid_date / out_of_range, per-day <code>no_data</code>.</li>
+    <li>2026-09-08: Hardened deploy: automated Worker deploy, header-only auth, CI tests, weekly fingerprint rebuild, pinned Wrangler/Python deps, D1-aware <code>/health</code>, <code>data_gap</code> vs <code>out_of_range</code>.</li>
   </ul>
 </body>
 </html>

@@ -81,10 +81,10 @@ export function isKnownDistrict(name) {
   return Object.prototype.hasOwnProperty.call(DISTRICT_ZH, canonicalDistrict(name));
 }
 
+export const EXPECTED_DISTRICTS = Object.keys(DISTRICT_ZH).length;
+export const STALE_AFTER_DAYS = 120;
+
 export function extractApiKey(request) {
-  const url = new URL(request.url);
-  const fromQuery = url.searchParams.get("key");
-  if (fromQuery && fromQuery.trim()) return fromQuery.trim();
   const fromHeader = request.headers.get("X-API-Key") ?? request.headers.get("x-api-key");
   if (fromHeader && fromHeader.trim()) return fromHeader.trim();
   const auth = request.headers.get("Authorization") ?? "";
@@ -136,7 +136,7 @@ export function shapeDay(row, date, coverage = {}) {
     return { date, rainfall_mm: null, is_rainy: null, error: "out_of_range" };
   }
   if (!row) {
-    return { date, rainfall_mm: null, is_rainy: null, error: "out_of_range" };
+    return { date, rainfall_mm: null, is_rainy: null, error: "data_gap" };
   }
   if (!toBool(row.data_ok)) {
     return { date, rainfall_mm: null, is_rainy: null, error: "no_data" };
@@ -166,6 +166,47 @@ export function shapeEnquiry(districtRaw, dates, rows, coverage = {}) {
 
 export function enquiryHttpStatus(days) {
   if (!days?.length) return 400;
+  if (days.some((day) => day.error === "data_gap")) return 500;
   if (days.every((day) => day.error === "out_of_range")) return 400;
   return 200;
+}
+
+export function utcToday(now = new Date()) {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+export function daysBetweenUtc(fromDate, toDate) {
+  const a = Date.parse(`${fromDate}T00:00:00Z`);
+  const b = Date.parse(`${toDate}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return Infinity;
+  return Math.floor((b - a) / 86_400_000);
+}
+
+export function shapeHealth(stats, now = new Date()) {
+  const rows = Number(stats?.rows ?? 0);
+  const districts = Number(stats?.districts ?? 0);
+  const min_date = stats?.min_date ?? null;
+  const max_date = stats?.max_date ?? null;
+  const refreshed_at_utc = stats?.refreshed_at_utc ?? null;
+  const reasons = [];
+  if (rows <= 0) reasons.push("empty");
+  if (districts !== EXPECTED_DISTRICTS) reasons.push("district_count");
+  if (!min_date || !max_date) reasons.push("missing_bounds");
+  if (rows > 0 && districts > 0 && rows % districts !== 0) reasons.push("incomplete_grid");
+  if (!max_date || daysBetweenUtc(max_date, utcToday(now)) > STALE_AFTER_DAYS) {
+    reasons.push("stale");
+  }
+  const body = {
+    ok: reasons.length === 0,
+    rows,
+    districts,
+    min_date,
+    max_date,
+    refreshed_at_utc,
+  };
+  if (reasons.length) {
+    body.error = "unhealthy";
+    body.reasons = reasons;
+  }
+  return body;
 }

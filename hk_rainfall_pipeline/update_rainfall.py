@@ -9,7 +9,7 @@ Writes one application table:
 Usage:
   python3 update_rainfall.py              # fetch source + rebuild
   python3 update_rainfall.py --from-csv PATH  # rebuild from an existing district-daily CSV
-  python3 update_rainfall.py --check-only     # print source Last-Modified, do not write
+  python3 update_rainfall.py --check-only     # compare Last-Modified/ETag; exit 10 if changed
 """
 
 from __future__ import annotations
@@ -45,6 +45,9 @@ RAW = DATA / "raw"
 LOOKUP_CSV = DATA / "rainy_day_lookup.csv"
 DB_PATH = DATA / "rainfall.db"
 META_PATH = DATA / "last_refresh.json"
+FINGERPRINT_PATH = DATA / "source_fingerprint.json"
+FINGERPRINT_STATIONS = ("HKO", "VP1", "SE")
+CHECK_CHANGED_EXIT = 10
 
 SESSION = requests.Session()
 SESSION.headers.update({"User-Agent": "hk-rainfall-pipeline/1.0"})
@@ -81,12 +84,95 @@ def download(url: str, dest: Path) -> tuple[Path, str | None]:
     raise RuntimeError(f"download failed: {url}")
 
 
-def head_last_modified(url: str) -> str | None:
+def head_source_headers(url: str) -> dict[str, str | None]:
     try:
         r = SESSION.head(url, timeout=20, allow_redirects=True)
-        return r.headers.get("Last-Modified")
+        return {
+            "last_modified": r.headers.get("Last-Modified"),
+            "etag": r.headers.get("ETag"),
+        }
+    except Exception:
+        return {"last_modified": None, "etag": None}
+
+
+def head_last_modified(url: str) -> str | None:
+    return head_source_headers(url).get("last_modified")
+
+
+def collect_source_fingerprint(year: int, header_fn=head_source_headers) -> dict:
+    sources = {}
+    for code in FINGERPRINT_STATIONS:
+        url_all = CSDI_ALL.format(code=code)
+        sources[f"{code}_ALL"] = {"url": url_all, **header_fn(url_all)}
+        url_year = CSDI_YEAR.format(code=code, year=year)
+        sources[f"{code}_{year}"] = {"url": url_year, **header_fn(url_year)}
+    return {
+        "year": year,
+        "collected_at_utc": dt.datetime.now(dt.timezone.utc)
+        .replace(microsecond=0)
+        .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sources": sources,
+    }
+
+
+def fingerprint_identity(fp: dict | None) -> dict[str, tuple[str | None, str | None]]:
+    sources = (fp or {}).get("sources") or {}
+    return {
+        key: (val.get("last_modified"), val.get("etag"))
+        for key, val in sorted(sources.items())
+    }
+
+
+def fingerprint_has_headers(fp: dict | None) -> bool:
+    for last_modified, etag in fingerprint_identity(fp).values():
+        if last_modified or etag:
+            return True
+    return False
+
+
+def fingerprint_changed(stored: dict | None, current: dict | None) -> bool:
+    if not fingerprint_has_headers(current):
+        return False
+    if not stored or not stored.get("sources"):
+        return True
+    return fingerprint_identity(stored) != fingerprint_identity(current)
+
+
+def load_stored_fingerprint() -> dict | None:
+    if not FINGERPRINT_PATH.exists():
+        return None
+    try:
+        return json.loads(FINGERPRINT_PATH.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
+def save_source_fingerprint(fp: dict) -> None:
+    DATA.mkdir(parents=True, exist_ok=True)
+    FINGERPRINT_PATH.write_text(json.dumps(fp, indent=2) + "\n", encoding="utf-8")
+    print(f"wrote {FINGERPRINT_PATH}")
+
+
+def run_check_only(year: int) -> int:
+    current = collect_source_fingerprint(year)
+    stored = load_stored_fingerprint()
+    print("Source Last-Modified / ETag (sample stations HKO, VP1, SE):")
+    for key, val in current.get("sources", {}).items():
+        print(f"  {key} Last-Modified={val.get('last_modified')} ETag={val.get('etag')}")
+    if stored:
+        print(f"Stored fingerprint: {FINGERPRINT_PATH}")
+    else:
+        print("Stored fingerprint: none")
+    print("Official dataset update frequency: monthly.")
+    if not fingerprint_has_headers(current):
+        print("Status: headers_unavailable (skip rebuild)")
+        return 0
+    if fingerprint_changed(stored, current):
+        print("Status: changed")
+        print("Rebuild required.")
+        return CHECK_CHANGED_EXIT
+    print("Status: unchanged")
+    return 0
 
 
 def parse_csdi(path: Path) -> pd.DataFrame:
@@ -297,22 +383,21 @@ def lookup_from_existing_district_csv(path: Path) -> pd.DataFrame:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Update HK rainy-day lookup table")
     parser.add_argument("--from-csv", type=Path, help="Rebuild lookup from district-daily CSV")
-    parser.add_argument("--check-only", action="store_true")
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Compare source Last-Modified/ETag with the stored fingerprint. Exit 10 if a rebuild is needed.",
+    )
     parser.add_argument("--year", type=int, default=dt.date.today().year)
     args = parser.parse_args()
 
     if args.check_only:
-        print("Source Last-Modified (sample stations HKO, VP1, SE):")
-        for code in ("HKO", "VP1", "SE"):
-            print(" ", code, "ALL", head_last_modified(CSDI_ALL.format(code=code)))
-            print(" ", code, args.year, head_last_modified(CSDI_YEAR.format(code=code, year=args.year)))
-        print("Official dataset update frequency: monthly.")
-        print("Recommended job: weekly Last-Modified check; rebuild when header changes, or on the 10th of each month.")
-        return 0
+        return run_check_only(args.year)
 
     if args.from_csv:
         lookup = lookup_from_existing_district_csv(args.from_csv)
         write_outputs(lookup)
+        save_source_fingerprint(collect_source_fingerprint(args.year))
         return 0
 
     years = list(range(START_YEAR, args.year + 1))
@@ -324,6 +409,7 @@ def main() -> int:
     dist = build_district_daily(station_daily)
     lookup = build_lookup(dist)
     write_outputs(lookup)
+    save_source_fingerprint(collect_source_fingerprint(args.year))
     return 0
 
 
