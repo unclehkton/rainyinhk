@@ -78,9 +78,12 @@ Space in English names is `%20` in the URL (`Wan%20Chai`). Chinese names must be
 | `Sai Kung` | 西貢區 | | Kau Sai Chau `KSC`, Pak Tam Chung `TYW`, Tseung Kwan O `JKB` |
 | `Sha Tin` | 沙田區 | `shatin` | Sha Tin `SHA` |
 | `Kwai Tsing` | 葵青區 | | Ching Pak House (Tsing Yi) `CPH` |
-| `Islands` | 離島區 | | Airport `HKA`, Cheung Chau `CCH`, Peng Chau `PEN`, Waglan Island `WGL` |
+| `Islands` | 離島區 | | Cheung Chau `CCH`, Peng Chau `PEN`, Waglan Island `WGL` |
+| `Lantau Island` | 大嶼山 | `lantau`, 大嶼山區 | Airport `HKA` |
 
 English matching is case-insensitive (`wan chai` → `Wan Chai`). An unknown `district` still returns 200, with `rainfall_mm` and `is_rainy` null for every requested date.
+
+`Lantau Island` is an API split of Islands District, not a 19th District Council. `Islands` / 離島區 is the rest of that district (Cheung Chau, Peng Chau, Waglan). The enquiry itself needs **no API key**.
 
 ## Rainy-day definition (do not change in the app)
 
@@ -90,6 +93,8 @@ Agreed rules already applied in the table:
 - A day is rainy only if district rainfall **≥ 0.2 mm**
 - Wan Chai and Southern use **The Peak (`VP1`)**
 - Kwun Tong uses **Kai Tak (`SE`)**
+- Lantau Island uses **Hong Kong International Airport (`HKA`)**
+- Other Islands District uses **Cheung Chau (`CCH`)**, **Peng Chau (`PEN`)**, **Waglan Island (`WGL`)**
 - Other districts use the official stations sited there
 - Missing HKO values are **not** treated as dry
 

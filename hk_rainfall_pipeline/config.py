@@ -27,12 +27,13 @@ DISTRICTS = [
     ("Sha Tin", "沙田區"),
     ("Kwai Tsing", "葵青區"),
     ("Islands", "離島區"),
+    ("Lantau Island", "大嶼山"),
 ]
 DIST_ZH = {en: zh for en, zh in DISTRICTS}
 
 # code, name_en, name_zh, district_en, lat_dd, lon_dd
 STATIONS = [
-    ("HKA", "Hong Kong International Airport", "香港國際機場", "Islands", 22.309444, 113.921944),
+    ("HKA", "Hong Kong International Airport", "香港國際機場", "Lantau Island", 22.309444, 113.921944),
     ("CCH", "Cheung Chau", "長洲", "Islands", 22.201111, 114.026667),
     ("HKO", "Hong Kong Observatory", "香港天文台", "Yau Tsim Mong", 22.301944, 114.174167),
     ("SE", "Kai Tak", "啟德", "Kowloon City", 22.309722, 114.213333),

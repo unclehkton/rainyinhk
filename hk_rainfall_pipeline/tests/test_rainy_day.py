@@ -22,6 +22,11 @@ class CanonicalDistrictTests(unittest.TestCase):
         self.assertEqual(canonical_district("觀塘區"), "Kwun Tong")
         self.assertEqual(canonical_district("Southern"), "Southern")
         self.assertEqual(canonical_district("南區"), "Southern")
+        self.assertEqual(canonical_district("Lantau Island"), "Lantau Island")
+        self.assertEqual(canonical_district("lantau"), "Lantau Island")
+        self.assertEqual(canonical_district("大嶼山"), "Lantau Island")
+        self.assertEqual(canonical_district("Islands"), "Islands")
+        self.assertEqual(canonical_district("離島區"), "Islands")
 
 
 class LookupContractTests(unittest.TestCase):
@@ -56,6 +61,21 @@ class LookupContractTests(unittest.TestCase):
         self.assertTrue(row["found"])
         self.assertEqual(row["source_station_codes"], "VP1")
         self.assertEqual(row["assignment"], "reference_station")
+
+    def _codes(self, row):
+        return {c.strip() for c in str(row["source_station_codes"]).split(",") if c.strip()}
+
+    def test_lantau_uses_airport(self):
+        row = check_rainy("2024-04-20", "Lantau Island")
+        self.assertTrue(row["found"])
+        self.assertEqual(self._codes(row), {"HKA"})
+        self.assertEqual(row["assignment"], "located_in_district")
+
+    def test_other_islands_exclude_airport(self):
+        row = check_rainy("2024-04-20", "Islands")
+        self.assertTrue(row["found"])
+        self.assertEqual(self._codes(row), {"CCH", "PEN", "WGL"})
+        self.assertNotIn("HKA", self._codes(row))
 
     def test_missing_date_is_unknown(self):
         row = check_rainy("1999-01-01", "Wan Chai")

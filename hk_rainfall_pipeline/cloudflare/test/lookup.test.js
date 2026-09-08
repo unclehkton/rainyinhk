@@ -17,6 +17,11 @@ describe("canonicalDistrict", () => {
     assert.equal(canonicalDistrict("觀塘區"), "Kwun Tong");
     assert.equal(canonicalDistrict("Southern"), "Southern");
     assert.equal(canonicalDistrict("南區"), "Southern");
+    assert.equal(canonicalDistrict("Lantau Island"), "Lantau Island");
+    assert.equal(canonicalDistrict("lantau"), "Lantau Island");
+    assert.equal(canonicalDistrict("大嶼山"), "Lantau Island");
+    assert.equal(canonicalDistrict("Islands"), "Islands");
+    assert.equal(canonicalDistrict("離島區"), "Islands");
   });
 });
 

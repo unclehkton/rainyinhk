@@ -56,6 +56,10 @@ DISTRICT_ALIASES = {
     "葵青區": "Kwai Tsing",
     "islands": "Islands",
     "離島區": "Islands",
+    "lantau island": "Lantau Island",
+    "lantau": "Lantau Island",
+    "大嶼山": "Lantau Island",
+    "大嶼山區": "Lantau Island",
 }
 
 

@@ -18,7 +18,7 @@ GET /rainy?district=灣仔區&date=2024-04-20
 }
 ```
 
-If HKO has not published that day, `rainfall_mm` and `is_rainy` are `null` (unknown, not dry). District names: English 18-district list, or the Chinese aliases in `src/lookup.js`.
+If HKO has not published that day, `rainfall_mm` and `is_rainy` are `null` (unknown, not dry). District names: the 18 District Councils plus `Lantau Island` (Airport `HKA`); `Islands` is CCH/PEN/WGL. No API key. Aliases are in `src/lookup.js`.
 
 ## One-time setup
 
