@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>rainy — implementation notes</title>
+</head>
+<body>
+  <h1>rainy — implementation notes</h1>
+
+  <h2>1. Current status</h2>
+  <p>
+    Hong Kong district rainy-day lookup is live as a Cloudflare Worker over D1.
+    The Mac/Actions job scrapes HKO monthly; the Worker answers
+    <code>GET /rainy?date=&amp;district=</code>
+    at <a href="https://hk-rainy-day.ngcheukhim.workers.dev/rainy?date=2024-04-20&amp;district=Wan%20Chai">https://hk-rainy-day.ngcheukhim.workers.dev</a>.
+  </p>
+  <ul>
+    <li>Source: HKO / DATA.GOV.HK daily total rainfall (25 official stations).</li>
+    <li>Trace / 微量 = 0 mm. Rainy only if district rainfall ≥ 0.2 mm.</li>
+    <li>Wan Chai + Southern → The Peak (<code>VP1</code>). Kwun Tong → Kai Tak (<code>SE</code>).</li>
+    <li>Missing HKO values → unknown, not dry. <code>two_day_rainy = 1</code> only if both days are wet and both have data.</li>
+    <li>Excel / old CSVs are analysis only and are not loaded by the app.</li>
+  </ul>
+
+  <h2>2. Decisions</h2>
+  <ul>
+    <li>One table: <code>rainy_day_lookup</code> (~17.5k rows). Query is one indexed SELECT.</li>
+    <li>Scrape on Mac or GitHub Actions. Not inside a free Worker (10 ms CPU, 50 subrequests).</li>
+    <li>No VPS. Monthly job is a few Linux minutes.</li>
+    <li>This feed is monthly QC climate data. It will not give “yesterday morning.”</li>
+    <li>Public GitHub repo for unlimited Actions minutes. Keep <code>workflow_dispatch</code>. Secret: <code>CLOUDFLARE_API_TOKEN</code>.</li>
+  </ul>
+
+  <h2>3. Change log</h2>
+  <ul>
+    <li>2026-09-08: Copied pipeline to the Mac, live HKO refresh, added Worker + D1, deployed <code>hk-rainy-day</code>.</li>
+  </ul>
+</body>
+</html>

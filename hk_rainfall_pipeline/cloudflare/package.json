@@ -1,0 +1,10 @@
+{
+  "name": "hk-rainy-day",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "seed": "../.venv/bin/python build_seed.py",
+    "deploy": "npx wrangler deploy"
+  }
+}

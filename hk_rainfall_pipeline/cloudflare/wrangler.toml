@@ -1,0 +1,9 @@
+name = "hk-rainy-day"
+main = "src/index.js"
+compatibility_date = "2026-09-08"
+account_id = "6115a2f91e2ec9c354ffc710d77491fa"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hk-rainy-day"
+database_id = "3859bbe2-29e7-43d6-9a52-1c05e4242b0b"

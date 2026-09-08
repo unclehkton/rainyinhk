@@ -1,0 +1,13 @@
+.DS_Store
+.wrangler/
+.venv/
+__pycache__/
+*.pyc
+data/raw/
+hk_rainfall_pipeline/.venv/
+hk_rainfall_pipeline/__pycache__/
+hk_rainfall_pipeline/data/raw/
+hk_rainfall_pipeline/data/rainfall.db
+hk_rainfall_pipeline/cloudflare/node_modules/
+hk_rainfall_pipeline/cloudflare/.wrangler/
+hk_rainfall_pipeline/cloudflare/seed.sql
