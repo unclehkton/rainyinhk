@@ -13,3 +13,6 @@ hk_rainfall_pipeline/cloudflare/node_modules/
 hk_rainfall_pipeline/cloudflare/.wrangler/
 hk_rainfall_pipeline/cloudflare/seed.sql
 hk_rainfall_pipeline/cloudflare/.dev.vars
+
+# never commit API tokens dropped in the repo root
+cloudflare_api.rtf
