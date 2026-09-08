@@ -53,6 +53,35 @@ Each requested date returns `rainfall_mm` and `is_rainy`. Null means unknown (HK
 
 D1 table `rainy_day_lookup` is the same table. Rebuild D1 with `cloudflare/build_seed.py` after `update_rainfall.py`.
 
+## API district mapping (18 District Councils)
+
+Pass `district` as the **canonical English** name, the **中文** name, or an alias. The Worker always returns `district` (English) and `district_zh`.
+
+Space in English names is `%20` in the URL (`Wan%20Chai`). Chinese names must be URL-encoded.
+
+| `district` (canonical) | 中文 (accepted) | Other accepted aliases | Rainfall source |
+|---|---|---|---|
+| `Central and Western` | 中西區 | `central` | The Peak `VP1` |
+| `Wan Chai` | 灣仔區 | `wanchai`, 灣仔 | The Peak `VP1` (reference; no HKO site in the district) |
+| `Eastern` | 東區 | | Shau Kei Wan `SKW` |
+| `Southern` | 南區 | | The Peak `VP1` (reference; no HKO site in the district) |
+| `Yau Tsim Mong` | 油尖旺區 | `ytm` | Hong Kong Observatory `HKO`, King's Park `KP` |
+| `Sham Shui Po` | 深水埗區 | | Sham Shui Po `SSP` |
+| `Kowloon City` | 九龍城區 | | Kai Tak `SE` |
+| `Wong Tai Sin` | 黃大仙區 | | Tate's Cairn `TC` |
+| `Kwun Tong` | 觀塘區 | | Kai Tak `SE` (reference; no HKO site in the district) |
+| `Tsuen Wan` | 荃灣區 | | Tai Mo Shan `TMS`, Tsuen Wan `TWN` |
+| `Tuen Mun` | 屯門區 | | Tuen Mun Children and Juvenile Home `TU1` |
+| `Yuen Long` | 元朗區 | | Lau Fau Shan `LFS`, Shek Kong `SEK`, Wetland Park `WLP` |
+| `North` | 北區 | | Sheung Shui `SSH`, Ta Kwu Ling `TKL` |
+| `Tai Po` | 大埔區 | | Tai Mei Tuk `PLC` |
+| `Sai Kung` | 西貢區 | | Kau Sai Chau `KSC`, Pak Tam Chung `TYW`, Tseung Kwan O `JKB` |
+| `Sha Tin` | 沙田區 | `shatin` | Sha Tin `SHA` |
+| `Kwai Tsing` | 葵青區 | | Ching Pak House (Tsing Yi) `CPH` |
+| `Islands` | 離島區 | | Airport `HKA`, Cheung Chau `CCH`, Peng Chau `PEN`, Waglan Island `WGL` |
+
+English matching is case-insensitive (`wan chai` → `Wan Chai`). An unknown `district` still returns 200, with `rainfall_mm` and `is_rainy` null for every requested date.
+
 ## Rainy-day definition (do not change in the app)
 
 Agreed rules already applied in the table:
@@ -119,7 +148,7 @@ WHERE district_en = 'Wan Chai'
   AND date = '2026-08-31';
 ```
 
-District names must match `district_en` (or use `rainy_day.canonical_district()` / `district_zh`).
+District names must match the 18-row mapping table above (or use `rainy_day.canonical_district()` / `district_zh`).
 
 ## How often to update
 
