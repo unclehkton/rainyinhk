@@ -386,7 +386,7 @@ def main() -> int:
     parser.add_argument(
         "--check-only",
         action="store_true",
-        help="Compare source Last-Modified/ETag with the stored fingerprint. Exit 10 if a rebuild is needed.",
+        help="Compare source Last-Modified/ETag with the stored fingerprint. Exit 10 if HKO published (rebuild needed).",
     )
     parser.add_argument("--year", type=int, default=dt.date.today().year)
     args = parser.parse_args()

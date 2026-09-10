@@ -2,8 +2,8 @@ name: Update rainfall lookup
 
 on:
   schedule:
-    - cron: "0 1 10 * *" # 09:00 HKT on the 10th — monthly rebuild
-    - cron: "0 1 * * 1" # 09:00 HKT Monday — rebuild if Last-Modified/ETag changed
+    - cron: "0 1 10 * *" # 09:00 HKT on the 10th — skip unless HKO Last-Modified/ETag changed
+    - cron: "0 1 * * 1" # 09:00 HKT Monday — same fingerprint skip
   workflow_dispatch:
     inputs:
       check_only:
@@ -11,7 +11,11 @@ on:
         type: boolean
         default: false
       force:
-        description: "Rebuild even if the source fingerprint is unchanged"
+        description: "Fetch even if the source fingerprint is unchanged"
+        type: boolean
+        default: false
+      full_rewrite:
+        description: "Wipe and rewrite every D1 lookup row (recovery only)"
         type: boolean
         default: false
 
@@ -34,26 +38,23 @@ jobs:
         id: decide
         working-directory: hk_rainfall_pipeline
         env:
-          EVENT: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
           CHECK_ONLY: ${{ github.event.inputs.check_only }}
           FORCE: ${{ github.event.inputs.force }}
+          FULL_REWRITE: ${{ github.event.inputs.full_rewrite }}
         run: |
           echo "rebuild=false" >> "$GITHUB_OUTPUT"
-          if [ "$FORCE" = "true" ]; then
+          echo "full_rewrite=false" >> "$GITHUB_OUTPUT"
+          if [ "$FULL_REWRITE" = "true" ]; then
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
+            echo "full_rewrite=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$EVENT" = "workflow_dispatch" ] && [ "$CHECK_ONLY" = "true" ]; then
+          if [ "$CHECK_ONLY" = "true" ]; then
             python3 update_rainfall.py --check-only || true
             echo "rebuild=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            echo "rebuild=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ "$EVENT" = "schedule" ] && [ "$SCHEDULE" = "0 1 10 * *" ]; then
+          if [ "$FORCE" = "true" ]; then
             echo "rebuild=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -91,16 +92,44 @@ jobs:
         working-directory: hk_rainfall_pipeline/cloudflare
         run: npm test
       - name: Build D1 seed
-        if: steps.decide.outputs.rebuild == 'true'
-        working-directory: hk_rainfall_pipeline/cloudflare
-        run: python3 build_seed.py
-      - name: Load remote D1
+        id: seed
         if: steps.decide.outputs.rebuild == 'true'
         working-directory: hk_rainfall_pipeline/cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FULL_REWRITE: ${{ steps.decide.outputs.full_rewrite }}
         run: |
-          npx wrangler d1 execute hk-rainy-day --remote --file=schema.sql --yes
+          if [ "$FULL_REWRITE" = "true" ]; then
+            python3 build_seed.py --full
+          else
+            python3 build_seed.py --from-remote
+          fi
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          stats = json.loads(Path("seed_stats.json").read_text(encoding="utf-8"))
+          apply = "false" if stats.get("noop") else "true"
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as fh:
+              fh.write(f"apply={apply}\n")
+              fh.write(f"upserts={stats.get('upserts', 0)}\n")
+              fh.write(f"deletes={stats.get('deletes', 0)}\n")
+          print(
+              f"seed mode={stats['mode']} upserts={stats['upserts']} "
+              f"deletes={stats['deletes']} noop={stats['noop']}"
+          )
+          PY
+      - name: Load remote D1
+        if: steps.decide.outputs.rebuild == 'true' && steps.seed.outputs.apply == 'true'
+        working-directory: hk_rainfall_pipeline/cloudflare
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FULL_REWRITE: ${{ steps.decide.outputs.full_rewrite }}
+        run: |
+          if [ "$FULL_REWRITE" = "true" ]; then
+            npx wrangler d1 execute hk-rainy-day --remote --file=schema.sql --yes
+          fi
           npx wrangler d1 execute hk-rainy-day --remote --file=seed.sql --yes
       - uses: actions/cache/save@v4
         if: steps.decide.outputs.rebuild == 'true'

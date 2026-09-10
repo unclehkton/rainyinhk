@@ -33,7 +33,7 @@
     <li>API covers 18 District Councils + Lantau Island split (19 keys).</li>
     <li>Worker deploys from <code>deploy-worker.yml</code> when Worker sources change. Rainfall D1 updates stay on <code>update-rainfall.yml</code>.</li>
     <li>Header-only API key. Query-string <code>?key=</code> is rejected. CORS is <code>*</code>, so this key is for a backend caller, not a public web app.</li>
-    <li>Weekly job stores HKO Last-Modified/ETag fingerprints and rebuilds only when they change. Monthly job on the 10th always rebuilds.</li>
+    <li>Scheduled jobs (10th and Monday) skip when HKO Last-Modified/ETag is unchanged. When HKO does publish, D1 gets <code>INSERT OR REPLACE</code> of new or changed lookup rows only — not a full table rewrite. <code>full_rewrite</code> remains for recovery.</li>
     <li>Python and Worker tests run on every push/PR and before a D1 import.</li>
   </ul>
 
@@ -46,6 +46,7 @@
     <li>2026-09-08: Required Worker API key (<code>RAINY_API_KEY</code> secret). Explicit errors: 401 unauthorized, 400 unknown_district / invalid_date / out_of_range, per-day <code>no_data</code>.</li>
     <li>2026-09-08: Hardened deploy: automated Worker deploy, header-only auth, CI tests, weekly fingerprint rebuild, pinned Wrangler/Python deps, D1-aware <code>/health</code>, <code>data_gap</code> vs <code>out_of_range</code>.</li>
     <li>2026-09-08: Request-time D1 reads use <code>pipeline_meta</code> (one row) instead of aggregating the lookup table on every <code>/rainy</code> and <code>/health</code>.</li>
+    <li>2026-09-10: Stop rewriting all ~18.5k D1 rows on a no-op HKO month. Skip when the source fingerprint is unchanged; otherwise upsert only new/changed days (and refresh <code>pipeline_meta</code>).</li>
   </ul>
 </body>
 </html>

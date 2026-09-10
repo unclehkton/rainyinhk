@@ -39,12 +39,17 @@ npx wrangler d1 create hk-rainy-day
 # paste database_id into wrangler.toml
 
 npx wrangler d1 execute hk-rainy-day --remote --file=schema.sql --yes
-../.venv/bin/python build_seed.py
+../.venv/bin/python build_seed.py --full
 npx wrangler d1 execute hk-rainy-day --remote --file=seed.sql --yes
 npx wrangler deploy
 ```
 
-Refresh job lives in the parent folder (`update_rainfall.py`). Do not scrape HKO from this Worker.
+Refresh job lives in the parent folder (`update_rainfall.py`). Do not scrape HKO from this Worker. Scheduled Actions skip when HKO Last-Modified/ETag is unchanged. When HKO publishes, `build_seed.py --from-remote` upserts only new or changed lookup rows.
+
+```bash
+../.venv/bin/python build_seed.py --from-remote   # delta vs live D1
+../.venv/bin/python build_seed.py --full          # wipe + insert (bootstrap)
+```
 
 ## Local
 

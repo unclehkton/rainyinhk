@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source Last-Modified / ETag fingerprint for the weekly check."""
+"""Source Last-Modified / ETag fingerprint for scheduled skip-if-unchanged."""
 
 from __future__ import annotations
 

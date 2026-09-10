@@ -12,6 +12,7 @@ hk_rainfall_pipeline/data/source_fingerprint.json
 hk_rainfall_pipeline/cloudflare/node_modules/
 hk_rainfall_pipeline/cloudflare/.wrangler/
 hk_rainfall_pipeline/cloudflare/seed.sql
+hk_rainfall_pipeline/cloudflare/seed_stats.json
 hk_rainfall_pipeline/cloudflare/.dev.vars
 
 # never commit API tokens dropped in the repo root
