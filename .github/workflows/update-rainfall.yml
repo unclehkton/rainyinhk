@@ -2,8 +2,7 @@ name: Update rainfall lookup
 
 on:
   schedule:
-    - cron: "0 1 10 * *" # 09:00 HKT on the 10th — skip unless HKO Last-Modified/ETag changed
-    - cron: "0 1 * * 1" # 09:00 HKT Monday — same fingerprint skip
+    - cron: "0 1 * * 1" # 09:00 HKT Monday — HEAD HKO; upsert new/changed rows only
   workflow_dispatch:
     inputs:
       check_only:
